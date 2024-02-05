@@ -250,15 +250,14 @@ class CLAPWrapper():
                                                   audio_duration*sample_rate]
         return torch.FloatTensor(audio_time_series)
 
-    def preprocess_audio(self, audio_files, resample):
+    def preprocess_audio(self, audio_file, resample):
         r"""Load list of audio files and return raw audio"""
         audio_tensors = []
-        for audio_file in audio_files:
-            audio_tensor = self.load_audio_into_tensor(
-                audio_file, self.args.duration, resample)
-            audio_tensor = audio_tensor.reshape(
-                1, -1).to(device=self.device)
-            audio_tensors.append(audio_tensor)
+        audio_tensor = self.load_audio_into_tensor(
+            audio_file, self.args.duration, resample)
+        audio_tensor = audio_tensor.reshape(
+            1, -1).to(device=self.device)
+        audio_tensors.append(audio_tensor)
         return self.default_collate(audio_tensors)
 
     def preprocess_text(self, ttext):
@@ -278,7 +277,7 @@ class CLAPWrapper():
         preprocessed_text = self.preprocess_text(class_labels)
         return self._get_text_embeddings(preprocessed_text)
 
-    def get_audio_embeddings(self, audio_files, resample=True):
+    def get_audio_embeddings(self, audio_files, resample=False):
         r"""Load list of audio files and return a audio embeddings"""
         preprocessed_audio = self.preprocess_audio(audio_files, resample)
         return self._get_audio_embeddings(preprocessed_audio)
