@@ -89,6 +89,8 @@ class CLAPWrapper():
             self.token_keys = ['input_ids', 'attention_mask']
         elif 'bert' in args.text_model:
             self.token_keys = ['input_ids', 'token_type_ids', 'attention_mask']
+        if 'gpt' in args.text_model:
+            text_model = "./gpt2"
 
         clap = CLAP(
             audioenc_name=args.audioenc_name,
@@ -100,7 +102,7 @@ class CLAPWrapper():
             fmax=args.fmax,
             classes_num=args.num_classes,
             out_emb=args.out_emb,
-            text_model=args.text_model,
+            text_model=text_model,
             transformer_embed_dim=args.transformer_embed_dim,
             d_proj=args.d_proj
         )
@@ -113,7 +115,7 @@ class CLAPWrapper():
         clap.load_state_dict(model_state_dict, strict=False)
 
         clap.eval()  # set clap in eval mode
-        tokenizer = AutoTokenizer.from_pretrained(args.text_model)
+        tokenizer = AutoTokenizer.from_pretrained(text_model)
         if 'gpt' in args.text_model:
             tokenizer.add_special_tokens({'pad_token': '!'})
 
@@ -134,6 +136,8 @@ class CLAPWrapper():
             self.token_keys = ['input_ids', 'attention_mask']
         elif 'bert' in args.text_model:
             self.token_keys = ['input_ids', 'token_type_ids', 'attention_mask']
+        if 'gpt' in args.text_model:
+            text_model = "./gpt2"
 
         clap = CLAP(
             audioenc_name=args.audioenc_name,
@@ -157,7 +161,7 @@ class CLAPWrapper():
         clapcap.load_state_dict(model_state_dict, strict=False)
 
         clapcap.eval()  # set clap in eval mode
-        tokenizer = AutoTokenizer.from_pretrained(args.text_model)
+        tokenizer = AutoTokenizer.from_pretrained(text_model)
         if 'gpt' in args.text_model:
             tokenizer.add_special_tokens({'pad_token': '!'})
 
