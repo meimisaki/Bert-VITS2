@@ -257,21 +257,20 @@ class CLAPWrapper():
             audio_tensor = self.load_audio_into_tensor(
                 audio_file, self.args.duration, resample)
             audio_tensor = audio_tensor.reshape(
-                1, -1).to(device=self.device) if self.use_cuda and torch.cuda.is_available() else audio_tensor.reshape(1, -1)
+                1, -1).to(device=self.device)
             audio_tensors.append(audio_tensor)
         return self.default_collate(audio_tensors)
 
-    def preprocess_text(self, text_queries):
+    def preprocess_text(self, ttext):
         r"""Load list of class labels and return tokenized text"""
         tokenized_texts = []
-        for ttext in text_queries:
-            if 'gpt' in self.args.text_model:
-                ttext = ttext + ' <|endoftext|>'
-            tok = self.tokenizer.encode_plus(
-                text=ttext, add_special_tokens=True, max_length=self.args.text_len, padding='max_length', return_tensors="pt")
-            for key in self.token_keys:
-                tok[key] = tok[key].reshape(-1).to(device=self.device) if self.use_cuda and torch.cuda.is_available() else tok[key].reshape(-1)
-            tokenized_texts.append(tok)
+        if 'gpt' in self.args.text_model:
+            ttext = ttext + ' <|endoftext|>'
+        tok = self.tokenizer.encode_plus(
+            text=ttext, add_special_tokens=True, max_length=self.args.text_len, padding='max_length', return_tensors="pt")
+        for key in self.token_keys:
+            tok[key] = tok[key].reshape(-1).to(device=self.device)
+        tokenized_texts.append(tok)
         return self.default_collate(tokenized_texts)
 
     def get_text_embeddings(self, class_labels):
