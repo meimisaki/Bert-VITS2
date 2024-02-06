@@ -366,18 +366,18 @@ class TextEncoder(nn.Module):
         # self.en_bert_proj = nn.Conv1d(1024, hidden_channels, 1)
         self.in_feature_net = nn.Sequential(
             # input is assumed to an already normalized embedding
-            nn.Linear(512, 1028, bias=False),
+            nn.Linear(1024, 2056, bias=False),
             nn.SiLU(),
-            nn.LayerNorm(1028),
-            *[Block(1028, 512) for _ in range(1)],
-            nn.Linear(1028, 512, bias=False),
+            nn.LayerNorm(2056),
+            *[Block(2056, 1024) for _ in range(1)],
+            nn.Linear(2056, 1024, bias=False),
             # normalize before passing to VQ?
             # nn.GELU(),
             # nn.LayerNorm(512),
         )
         self.emo_vq = VectorQuantize(
-            dim=512,
-            codebook_size=64,
+            dim=1024,
+            codebook_size=96,
             codebook_dim=32,
             commitment_weight=0.1,
             decay=0.85,
@@ -388,7 +388,7 @@ class TextEncoder(nn.Module):
             threshold_ema_dead_code=2,
             use_cosine_sim = True
         )
-        self.out_feature_net = nn.Linear(512, hidden_channels)
+        self.out_feature_net = nn.Linear(1024, hidden_channels)
 
         self.encoder = attentions.Encoder(
             hidden_channels,
