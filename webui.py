@@ -122,20 +122,9 @@ def generate_audio_multilang(
 
 
 def tts_split(
-    text: str,
-    speaker,
-    sdp_ratio,
-    noise_scale,
-    noise_scale_w,
-    length_scale,
-    language,
-    cut_by_sent,
-    interval_between_para,
-    interval_between_sent,
-    reference_audio,
-    emotion,
-    style_text,
-    style_weight,
+    text, speaker, sdp_ratio, noise_scale, noise_scale_w, length_scale, language,
+    cut_by_para, cut_by_sent, interval_between_para, interval_between_sent,
+    reference_audio, emotion, style_text, style_weight,
 ):
     if style_text == "":
         style_text = None
@@ -215,28 +204,9 @@ def tts_split(
 
 
 def tts_fn(
-    text: str,
-    speaker,
-    sdp_ratio,
-    noise_scale,
-    noise_scale_w,
-    length_scale,
-    language,
-    reference_audio,
-    emotion,
-    prompt_mode,
-    style_text=None,
-    style_weight=0,
+    text, speaker, sdp_ratio, noise_scale, noise_scale_w, length_scale, language,
+    reference_audio, emotion, style_text, style_weight,
 ):
-    if style_text == "":
-        style_text = None
-    if prompt_mode == "Audio prompt":
-        if reference_audio == None:
-            return ("Invalid audio prompt", None)
-        else:
-            reference_audio = load_audio(reference_audio)[1]
-    else:
-        reference_audio = None
     audio_list = []
     if language == "mix":
         bool_valid, str_valid = re_matching.validate_text(text)
@@ -383,25 +353,36 @@ def tts_fn(
     audio_concat = np.concatenate(audio_list)
     return "Success", (hps.data.sampling_rate, audio_concat)
 
-
 def load_audio(path):
     audio, sr = librosa.load(path, 48000)
     # audio = librosa.resample(audio, 44100, 48000)
     return sr, audio
 
-
-def gr_util(item):
-    if item == "Text prompt":
-        return {"visible": True, "__type__": "update"}, {
-            "visible": False,
-            "__type__": "update",
-        }
+def tts_dispatch(
+    text, speaker, sdp_ratio, noise_scale, noise_scale_w, length_scale, language,
+    cut_by_para, cut_by_sent, interval_between_para, interval_between_sent,
+    prompt_mode, reference_audio, emotion, style_text, style_weight,
+):
+    if style_text == "":
+        style_text = None
+    if prompt_mode == "Audio prompt":
+        if reference_audio == None:
+            return ("Invalid audio prompt", None)
+        else:
+            reference_audio = load_audio(reference_audio)[1]
     else:
-        return {"visible": False, "__type__": "update"}, {
-            "visible": True,
-            "__type__": "update",
-        }
-
+        reference_audio = None
+    if cut_by_para:
+        return tts_split(
+            text, speaker, sdp_ratio, noise_scale, noise_scale_w, length_scale, language,
+            cut_by_para, cut_by_sent, interval_between_para, interval_between_sent,
+            reference_audio, emotion, style_text, style_weight,
+        )
+    else:
+        return tts_fn(
+            text, speaker, sdp_ratio, noise_scale, noise_scale_w, length_scale, language,
+            reference_audio, emotion, style_text, style_weight,
+        )
 
 if __name__ == "__main__":
     if config.webui_config.debug:
@@ -415,155 +396,117 @@ if __name__ == "__main__":
     )
     speaker_ids = hps.data.spk2id
     speakers = list(speaker_ids.keys())
-    languages = ["ZH", "JP", "EN", "mix", "auto"]
+    languages = ["JP"]
     with gr.Blocks() as app:
         with gr.Row():
             with gr.Column():
-                text = gr.TextArea(
-                    label="输入文本内容",
-                    placeholder="""
-                    如果你选择语言为\'mix\'，必须按照格式输入，否则报错:
-                        格式举例(zh是中文，jp是日语，不区分大小写；说话人举例:gongzi):
-                         [说话人1]<zh>你好，こんにちは！ <jp>こんにちは，世界。
-                         [说话人2]<zh>你好吗？<jp>元気ですか？
-                         [说话人3]<zh>谢谢。<jp>どういたしまして。
-                         ...
-                    另外，所有的语言选项都可以用'|'分割长段实现分句生成。
-                    """,
-                )
-                slicer = gr.Button("快速切分", variant="primary")
-                speaker = gr.Dropdown(
-                    choices=speakers, value=speakers[0], label="Speaker"
-                )
-                _ = gr.Markdown(
-                    value="提示模式（Prompt mode）：可选文字提示或音频提示，用于生成文字或音频指定风格的声音。\n"
-                )
-                prompt_mode = gr.Radio(
-                    ["Text prompt", "Audio prompt"],
-                    label="Prompt Mode",
-                    value="Text prompt",
-                )
-                text_prompt = gr.Textbox(
-                    label="Text prompt",
-                    placeholder="用文字描述生成风格。如：Happy",
-                    value="Happy",
-                    visible=True,
-                )
-                audio_prompt = gr.Audio(
-                    label="Audio prompt", type="filepath", visible=False
-                )
-                sdp_ratio = gr.Slider(
-                    minimum=0, maximum=1, value=0.5, step=0.1, label="SDP Ratio"
-                )
-                noise_scale = gr.Slider(
-                    minimum=0.1, maximum=2, value=0.6, step=0.1, label="Noise"
-                )
-                noise_scale_w = gr.Slider(
-                    minimum=0.1, maximum=2, value=0.8, step=0.1, label="Noise_W"
-                )
-                length_scale = gr.Slider(
-                    minimum=0.1, maximum=2, value=1.0, step=0.1, label="Length"
-                )
-                language = gr.Dropdown(
-                    choices=languages, value=languages[0], label="Language"
-                )
-                btn = gr.Button("生成音频！", variant="primary")
-            with gr.Column():
-                with gr.Accordion("融合文本语义", open=False):
-                    gr.Markdown(
-                        value="使用辅助文本的语意来辅助生成对话（语言保持与主文本相同）\n\n"
-                        "**注意**：不要使用**指令式文本**（如：开心），要使用**带有强烈情感的文本**（如：我好快乐！！！）\n\n"
-                        "效果较不明确，留空即为不使用该功能\n\n"
-                        "**如遇到主文本发音错误，可尝试替换主文本中发音错误的字为正确的谐音字，同时将原主文本填写于此，Weight拉满，以获得正确发音，同时保留原文本的Bert语义信息。**"
+                with gr.Group():
+                    text = gr.TextArea(
+                        label="Text",
+                        placeholder="Enter text here, currently only supports Japanese",
                     )
-                    style_text = gr.Textbox(label="辅助文本")
+                    speaker = gr.Dropdown(
+                        choices=speakers, value=speakers[0], label="Speaker"
+                    )
+                with gr.Group():
+                    sdp_ratio = gr.Slider(
+                        minimum=0, maximum=1, value=0.5, step=0.1, label="SDP Ratio"
+                    )
+                    noise_scale = gr.Slider(
+                        minimum=0.1, maximum=2, value=0.6, step=0.1, label="Noise"
+                    )
+                    noise_scale_w = gr.Slider(
+                        minimum=0.1, maximum=2, value=0.8, step=0.1, label="Noise_W"
+                    )
+                    length_scale = gr.Slider(
+                        minimum=0.1, maximum=2, value=1.0, step=0.1, label="Length"
+                    )
+                    language = gr.Dropdown(
+                        choices=languages, value=languages[0], label="Language"
+                    )
+                syn_btn = gr.Button("Synthesize", variant="primary")
+            with gr.Column():
+                with gr.Accordion(label="About", open=False):
+                    _ = gr.Markdown(value="""${about}""")
+                with gr.Row():
+                    with gr.Column():
+                        prompt_mode = gr.State("Text prompt")
+                        with gr.Tab(label="Text prompt") as text_tab:
+                            text_prompt = gr.Textbox(
+                                label="Emotional text",
+                                placeholder="Describe your desired emotion in a few words, e.g: Happy",
+                                value="Neutral",
+                            )
+                        with gr.Tab(label="Audio prompt") as audio_tab:
+                            audio_prompt = gr.Audio(
+                                label="Reference audio", type="filepath"
+                            )
+                            audio_prompt.upload(
+                                lambda x: load_audio(x),
+                                inputs=[audio_prompt],
+                                outputs=[audio_prompt],
+                            )
+                        text_tab.select(
+                            lambda: "Text prompt", inputs=[], outputs=[prompt_mode]
+                        )
+                        audio_tab.select(
+                            lambda: "Audio prompt", inputs=[], outputs=[prompt_mode]
+                        )
+                with gr.Group(visible=False):
+                    style_text = gr.Textbox(
+                        label="Stylization text",
+                        placeholder="Fine-grained control of voice emotions",
+                    )
                     style_weight = gr.Slider(
                         minimum=0,
                         maximum=1,
                         value=0.7,
                         step=0.1,
-                        label="Weight",
-                        info="主文本和辅助文本的bert混合比率，0表示仅主文本，1表示仅辅助文本",
+                        label="Stylization strength",
                     )
-                with gr.Row():
-                    with gr.Column():
-                        interval_between_sent = gr.Slider(
-                            minimum=0,
-                            maximum=5,
-                            value=0.2,
-                            step=0.1,
-                            label="句间停顿(秒)，勾选按句切分才生效",
-                        )
-                        interval_between_para = gr.Slider(
-                            minimum=0,
-                            maximum=10,
-                            value=1,
-                            step=0.1,
-                            label="段间停顿(秒)，需要大于句间停顿才有效",
-                        )
-                        opt_cut_by_sent = gr.Checkbox(
-                            label="按句切分    在按段落切分的基础上再按句子切分文本"
-                        )
-                        slicer = gr.Button("切分生成", variant="primary")
-                text_output = gr.Textbox(label="状态信息")
-                audio_output = gr.Audio(label="输出音频")
-                # explain_image = gr.Image(
-                #     label="参数解释信息",
-                #     show_label=True,
-                #     show_share_button=False,
-                #     show_download_button=False,
-                #     value=os.path.abspath("./img/参数说明.png"),
-                # )
-        btn.click(
-            tts_fn,
+                with gr.Group():
+                    opt_cut_by_sent = gr.Checkbox(
+                        label="Split text by sentences"
+                    )
+                    interval_between_sent = gr.Slider(
+                        minimum=0,
+                        maximum=5,
+                        value=0.2,
+                        step=0.1,
+                        label="Pause time between sentences (in seconds)",
+                    )
+                    opt_cut_by_para = gr.Checkbox(
+                        label="Split text by paragraphs"
+                    )
+                    interval_between_para = gr.Slider(
+                        minimum=0,
+                        maximum=10,
+                        value=1,
+                        step=0.1,
+                        label="Pause time between paragraphs (in seconds)",
+                    )
+                    opt_cut_by_sent.input(
+                        lambda x, y: x or y,
+                        inputs=[opt_cut_by_para, opt_cut_by_sent],
+                        outputs=[opt_cut_by_para]
+                    )
+                    opt_cut_by_para.input(
+                        lambda x, y: x and y,
+                        inputs=[opt_cut_by_para, opt_cut_by_sent],
+                        outputs=[opt_cut_by_sent]
+                    )
+                with gr.Group():
+                    text_output = gr.Textbox(label="Info")
+                    audio_output = gr.Audio(label="Output")
+
+        syn_btn.click(
+            tts_dispatch,
             inputs=[
-                text,
-                speaker,
-                sdp_ratio,
-                noise_scale,
-                noise_scale_w,
-                length_scale,
-                language,
-                audio_prompt,
-                text_prompt,
-                prompt_mode,
-                style_text,
-                style_weight,
+                text, speaker, sdp_ratio, noise_scale, noise_scale_w, length_scale, language,
+                opt_cut_by_para, opt_cut_by_sent, interval_between_para, interval_between_sent,
+                prompt_mode, audio_prompt, text_prompt, style_text, style_weight,
             ],
             outputs=[text_output, audio_output],
-        )
-
-        slicer.click(
-            tts_split,
-            inputs=[
-                text,
-                speaker,
-                sdp_ratio,
-                noise_scale,
-                noise_scale_w,
-                length_scale,
-                language,
-                opt_cut_by_sent,
-                interval_between_para,
-                interval_between_sent,
-                audio_prompt,
-                text_prompt,
-                style_text,
-                style_weight,
-            ],
-            outputs=[text_output, audio_output],
-        )
-
-        prompt_mode.change(
-            lambda x: gr_util(x),
-            inputs=[prompt_mode],
-            outputs=[text_prompt, audio_prompt],
-        )
-
-        audio_prompt.upload(
-            lambda x: load_audio(x),
-            inputs=[audio_prompt],
-            outputs=[audio_prompt],
         )
 
     print("推理页面已开启!")
