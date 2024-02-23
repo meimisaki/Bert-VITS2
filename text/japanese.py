@@ -253,6 +253,31 @@ def g2phone_tone_wo_punct(text: str) -> list[tuple[str, int]]:
             current_phrase.append((letter, current_tone))
     return result
 
+import pykakasi
+kks = pykakasi.kakasi()
+
+def pykakasi_convert(text):
+    res = ""
+    for item in kks.convert(text):
+        res += item["kana"]
+    return res
+
+def pyopenjtalk_run_frontend(text):
+    parsed = pyopenjtalk.run_frontend(text)
+    norm_text = ""
+    need_rerun = False
+    for parts in parsed:
+        word = replace_punctuation(parts["string"])
+        yomi = parts["pron"].replace("’", "")
+        if word not in ".,!'-" and yomi == "、":
+            norm_text += pykakasi_convert(word)
+            need_rerun = True
+        else:
+            norm_text += word
+    if need_rerun:
+        return pyopenjtalk.run_frontend(norm_text)
+    else:
+        return parsed
 
 def text2sep_kata(norm_text: str) -> tuple[list[str], list[str]]:
     """
@@ -264,15 +289,14 @@ def text2sep_kata(norm_text: str) -> tuple[list[str], list[str]]:
     ["私", "は", "そう", "思う", "!", "って", "感じ", "?"], ["ワタシ", "ワ", "ソー", "オモウ", "!", "ッテ", "カンジ", "?"]
     """
     # parsed: OpenJTalkの解析結果
-    parsed = pyopenjtalk.run_frontend(norm_text)
+    parsed = pyopenjtalk_run_frontend(norm_text)
     sep_text: list[str] = []
     sep_kata: list[str] = []
     for parts in parsed:
         # word: 実際の単語の文字列
         # yomi: その読み、但し無声化サインの`’`は除去
-        word, yomi = replace_punctuation(parts["string"]), parts["pron"].replace(
-            "’", ""
-        )
+        word = replace_punctuation(parts["string"])
+        yomi = parts["pron"].replace("’", "")
         """
         ここで`yomi`の取りうる値は以下の通りのはず。
         - `word`が通常単語 → 通常の読み（カタカナ）
@@ -287,13 +311,7 @@ def text2sep_kata(norm_text: str) -> tuple[list[str], list[str]]:
         assert yomi != "", f"Empty yomi: {word}"
         if yomi == "、":
             # wordは正規化されているので、`.`, `,`, `!`, `'`, `-`のいずれか
-            if word not in (
-                ".",
-                ",",
-                "!",
-                "'",
-                "-",
-            ):
+            if word not in ".,!'-":
                 # ここはpyopenjtalkが読めない文字等のときに起こる
                 raise ValueError(f"Cannot read: {word} in:\n{norm_text}")
             # yomiは元の記号のままに変更
@@ -330,7 +348,7 @@ def pyopenjtalk_g2p_prosody(text: str, drop_unvoiced_vowels: bool = True) -> lis
         modeling for neural TTS`: https://doi.org/10.1587/transinf.2020EDP7104
 
     """
-    labels = pyopenjtalk.make_label(pyopenjtalk.run_frontend(text))
+    labels = pyopenjtalk.make_label(pyopenjtalk_run_frontend(text))
     N = len(labels)
 
     phones = []
