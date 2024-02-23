@@ -59,10 +59,13 @@ rep_map = {
     "]": "'",
     "—": "-",
     "−": "-",
-    # "～": "-",  # これは長音記号「ー」として扱うよう変更
-    # "~": "-",  # これは長音記号「ー」として扱うよう変更
+    # "~": "-", # u007e これは長音記号「ー」として扱うよう変更
+    # "～": "-", # uff5e これは長音記号「ー」として扱うよう変更
+    # "〜": "-", # u301c これは長音記号「ー」として扱うよう変更
     "「": "'",
     "」": "'",
+    "『": "'",
+    "』": "'",
 }
 
 
@@ -92,10 +95,13 @@ def text_normalize(text):
     res = unicodedata.normalize("NFKC", text)
 
     res = japanese_convert_numbers_to_words(res)  # 「100円」→「百円」等
+    res = japanese_convert_symbols_to_words(res)  # 「@」→「アット」等
 
-    # 「～」と「~」も長音記号として扱う
-    res = res.replace("~", "ー")
-    res = res.replace("～", "ー")
+    # 「~」と「～」と「〜」も長音記号として扱う
+    # u007e: halfwidth tilde
+    # uff5e: fullwidth tilde, widely used on Windows
+    # u301c: wave dash, correctly mapped from Shift-JIS
+    res = re.sub(r"[~～〜]", "ー", res)
 
     res = replace_punctuation(res)  # 句読点等正規化、読めない文字を削除
 
@@ -130,15 +136,22 @@ def replace_punctuation(text: str) -> str:
         "",
         replaced_text,
     )
-
     return replaced_text
 
+symbol_map = {
+    "@": "アット",
+    "%": "パーセント",
+    "&": "アンド",
+    "×": "かける", # u00d7: multiplication sign
+    "÷": "割る", # u00f7: division sign
+    "=": "イコール",
+}
 
 _NUMBER_WITH_SEPARATOR_RX = re.compile("[0-9]{1,3}(,[0-9]{3})+")
 _CURRENCY_MAP = {"$": "ドル", "¥": "円", "£": "ポンド", "€": "ユーロ"}
 _CURRENCY_RX = re.compile(r"([$¥£€])([0-9.]*[0-9])")
 _NUMBER_RX = re.compile(r"[0-9]+(\.[0-9]+)?")
-
+_SYMBOL_RX = re.compile("|".join(re.escape(p) for p in symbol_map.keys()))
 
 def japanese_convert_numbers_to_words(text: str) -> str:
     res = _NUMBER_WITH_SEPARATOR_RX.sub(lambda m: m[0].replace(",", ""), text)
@@ -146,6 +159,8 @@ def japanese_convert_numbers_to_words(text: str) -> str:
     res = _NUMBER_RX.sub(lambda m: num2words(m[0], lang="ja"), res)
     return res
 
+def japanese_convert_symbols_to_words(text: str) -> str:
+    return _SYMBOL_RX.sub(lambda m: symbol_map[m.group()], text)
 
 def g2p(norm_text: str) -> tuple[list[str], list[int], list[int]]:
     """
@@ -447,7 +462,7 @@ def distribute_phone(n_phone: int, n_word: int) -> list[int]:
 def handle_long(sep_phonemes: list[list[str]]) -> list[list[str]]:
     for i in range(len(sep_phonemes)):
         if sep_phonemes[i][0] == "ー":
-            sep_phonemes[i][0] = sep_phonemes[i - 1][-1]
+            sep_phonemes[i][0] = sep_phonemes[i - 1][-1] if i > 0 else "."
         if "ー" in sep_phonemes[i]:
             for j in range(len(sep_phonemes[i])):
                 if sep_phonemes[i][j] == "ー":
